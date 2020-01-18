@@ -1,8 +1,6 @@
 import logging
-
-"""ban lam gu"""
+import re
 import sqlite3
-
 import os
 my_file = 'dict.db'
 if os.path.exists(my_file):
@@ -12,14 +10,16 @@ else:
 conn = sqlite3.connect('dict.db') #('example.db')
 c = conn.cursor()
 c.execute('''CREATE TABLE hokk
-             (p text, h text)''')
+             (p text, h text, src text)''')
 c.execute('''CREATE TABLE zhtc
-             (p text, zh text)''')
+             (p text, zh text, src text)''')
 def is_zh(strs):
     for _char in strs:
         if '\u4e00' <= _char <= '\u9fa5':
             return True
     return False
+p_pattern = re.compile(r'^[a-zA-Z]+$')
+src = "pn"
 with open("dict.txt") as f:
     entries = f.readlines()
 entries = [x.strip() for x in entries] 
@@ -28,12 +28,13 @@ for item in entries:
     p = splited[0]
     if is_zh(splited[1]):
         zh = splited[1]
-        c.execute("INSERT INTO zhtc VALUES ('" + p +"','" + zh + "')")
+        c.execute("INSERT INTO zhtc VALUES ('" + p +"','" + zh + "','" + src +"')")
     else: 
         h = splited[1]
-        c.execute("INSERT INTO hokk VALUES ('" + p +"','" + h + "')")
-		
-
+        c.execute("INSERT INTO hokk VALUES ('" + p +"','" + h + "','" + src +"')")
+	  # TODO: Reply message too long
+# TODO: Independent Funcs
+# TODO: Beautify results
 conn.commit()
 
 
@@ -63,26 +64,54 @@ def start(update, context):
 
 
 def help(update, context):
-    update.message.reply_text('Help!')
+    update.message.reply_text('Lí hó!')
 
-
+p_pattern = re.compile(r'^[a-zA-Z]+$')
 def echo(update, context):
     """Echo the user message."""
     txt = update.message.text
     print(txt)
+    
     conn = sqlite3.connect('dict.db') #('example.db')
     c = conn.cursor()
-    c.execute("SELECT * FROM zhtc WHERE lower(p)=lower('" + txt + "')")
-    r = c.fetchall()
-    print(r)
+    if is_zh(txt):
+        # Hàn-jī
+        # c.execute("SELECT * FROM  zhtc WHERE zh LIKE '" + txt + "'")
+        c.execute("SELECT * FROM  zhtc WHERE zh LIKE '%" +   txt + "%'")
+        r = c.fetchall()
+        print(r)
   
-    if r:
-        re = r[0][1]
+        if r:
+            re = r[0][0]
+        else:
+            re = "Hàn-jī not found."
+        update.message.reply_html(re + """
+        debug: <code>""" + str(r) + "</code>")
+    elif p_pattern.match(txt):
+        # plain
+        c.execute("SELECT * FROM zhtc  WHERE lower(p)=lower('" + txt + "')")
+        r = c.fetchall()
+        print(r)
+  
+        if r:
+            re = r[0][1]
+        else:
+            re = "Plain text not found."
+        update.message.reply_html(re + """
+        debug: <code>""" + str(r) + "</code>")
     else:
-        re = "Not found."
-    update.message.reply_html(re + """
-    debug: <code>""" + str(r) + "</code>")
-    conn.close
+        # Pe̍h-ōe-jī
+        c.execute("SELECT * FROM  hokk WHERE h LIKE '%" +   txt + "%'")
+        r = c.fetchall()
+        print(r)
+  
+        if r:
+            re = r[0][1]
+        else:
+            re = "Pe̍h-ōe-jī not found."
+        update.message.reply_html(re + """
+        debug: <code>""" + str(r) + "</code>")
+    conn.close()
 
 def error(update, context):
     """Log Errors caused by Updates."""
